@@ -1,0 +1,96 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "WhatsApp API",
+    "description": "A simple Node.js API for sending WhatsApp messages and retrieving QR codes using Baileys.",
+    "version": "1.0.0"
+  },
+  "host": "localhost:3000",
+  "basePath": "/",
+  "schemes": ["http"],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check if the API is running and healthy.",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": { "type": "string", "example": "ok" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/whatsapp/qr": {
+      "get": {
+        "summary": "Get WhatsApp QR Code",
+        "description": "Returns a QR code in PNG format (or base64) that must be scanned to authenticate the WhatsApp session.",
+        "produces": ["image/png"],
+        "responses": {
+          "200": {
+            "description": "QR Code generated successfully",
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          },
+          "408": {
+            "description": "Timeout while waiting for QR Code"
+          }
+        }
+      }
+    },
+    "/whatsapp/messages": {
+      "post": {
+        "summary": "Send WhatsApp Message",
+        "description": "Send a WhatsApp message with text and/or image to a phone number.",
+        "consumes": ["multipart/form-data"],
+        "parameters": [
+          {
+            "name": "text",
+            "in": "formData",
+            "description": "Message text",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "phoneNumber",
+            "in": "formData",
+            "description": "Phone number in E.164 format (e.g. 554991563988)",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "image",
+            "in": "formData",
+            "description": "Image file (optional: JPG, PNG, WEBP, GIF)",
+            "required": false,
+            "type": "file"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message sent successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": { "type": "string", "example": "message sent successfully" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (missing or incorrect data)"
+          },
+          "500": {
+            "description": "Internal server error while sending message"
+          }
+        }
+      }
+    }
+  }
+}
