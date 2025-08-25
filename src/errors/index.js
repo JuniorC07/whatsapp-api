@@ -8,8 +8,10 @@ class HttpError extends Error {
 }
 
 class NotFoundError extends HttpError {
+  context
   constructor({ context = 'data' }) {
     super({ message: `${context} not found` })
+    this.context = context
   }
   statusCode = 404
 }

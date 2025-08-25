@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "lint": "eslint ./src && prettier --check ./src",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --reporter=lcov --forceExit",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage --reporter=lcov --forceExit",
+    "test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk node_modules/.bin/jest --runInBand --reporter=lcov  --watchAll  test/unit",
     "lint-fix": "eslint ./src --fix && prettier --write ./src",
     "dev": "nodemon --inspect  server.js",
     "docs": "node swagger.js"
@@ -19,6 +21,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "jest": "^30.0.5",
     "nodemon": "^3.1.0",
     "prettier": "^3.6.2",
     "swagger-autogen": "^2.23.7"
