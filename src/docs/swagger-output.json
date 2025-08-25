@@ -55,13 +55,13 @@
             "name": "text",
             "in": "formData",
             "description": "Message text",
-            "required": false,
+            "required": true,
             "type": "string"
           },
           {
             "name": "phoneNumber",
             "in": "formData",
-            "description": "Phone number in E.164 format (e.g. 554991563988)",
+            "description": "Phone number in E.164 format (e.g. 554999999999)",
             "required": true,
             "type": "string"
           },

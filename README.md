@@ -70,7 +70,6 @@ Checks if the API is running.
 `GET /whatsapp/qr`
 Returns a QR code image (PNG/Base64) to authenticate the WhatsApp session.
 
-
 ---
 
 ### 🔹 Send WhatsApp Message
@@ -81,7 +80,7 @@ Sends a WhatsApp message with **text** and/or **image**.
 **Body (multipart/form-data):**
 
 * `phoneNumber` (string, required) – Phone number in E.164 format, e.g., `554999999999`
-* `text` (string, optional) – Message text
+* `text` (string, required) – Message text
 * `image` (file, optional) – Image file (JPG, PNG, WEBP, GIF)
 
 ---
@@ -95,6 +94,75 @@ API documentation: [http://localhost:3000/docs](http://localhost:3000/docs).
 
 * Authenticate a WhatsApp session via QR Code.
 * Send text messages.
-* Send images with captions(saved on ./uploads).
+* Send images with captions (saved in `./uploads`).
 
 ---
+
+## Docker & Docker-Compose
+
+You can also run the API and MongoDB with **Docker Compose** without installing Node.js or MongoDB locally:
+
+```bash
+docker compose up -d --build
+```
+
+This will start two containers:
+
+* **`whatsapp-api`** → Node.js application running on [http://localhost:3000](http://localhost:3000)
+* **`mongo`** → MongoDB database running on `mongo:27017` (internal network)
+
+Uploaded files are stored in `./uploads` (mapped as a volume).
+MongoDB data is persisted in a Docker volume (`mongo_data`) so data is not lost when containers are restarted.
+
+View logs:
+
+```bash
+docker compose logs -f api
+docker compose logs -f mongo
+```
+
+Stop and remove containers:
+
+```bash
+docker compose down
+```
+
+---
+
+## Testing
+
+This project uses **Jest** with **ESM**. The available scripts are:
+
+```json
+"test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --reporter=lcov --forceExit",
+"test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage --reporter=lcov --forceExit",
+"test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk node_modules/.bin/jest --runInBand --reporter=lcov --watchAll test/unit"
+```
+
+### Run tests
+
+Run tests locally (outside Docker, since `devDependencies` are not installed in the production image):
+
+```bash
+npm test
+```
+
+Run with coverage report:
+
+```bash
+npm run test:coverage
+```
+
+The HTML coverage report will be generated at:
+`coverage/lcov-report/index.html`
+
+### Debugging tests
+
+Run tests with Node.js Inspector enabled:
+
+```bash
+npm run test:debug
+```
+
+You can set breakpoints and step through the tests.
+
