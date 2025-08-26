@@ -1,11 +1,10 @@
-import * as baileys from 'baileys'
+import { makeWASocket, fetchLatestBaileysVersion, DisconnectReason } from 'baileys'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import { useMongoAuthState } from '../utils/useMongoAuthState.js'
 import { SocketError } from '../errors/index.js'
 
 const DEFAULT_TIMEOUT = 5000
-const { makeWASocket, fetchLatestBaileysVersion, DisconnectReason } = baileys
 
 const sessions = new Map()
 
@@ -44,22 +43,25 @@ const initSocket = async (sessionId) => {
 
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode
-      console.log(`[${sessionId}] Disconnected. Reason:`, statusCode, lastDisconnect?.error)
+      console.log(
+        `[${sessionId}] Disconnected. Reason:`,
+        statusCode,
+        lastDisconnect?.error?.message
+      )
 
       sessionData.status = 'closed'
       sessionData.lastQR = null
+      sessionData.sock ?? sessionData.sock.ev.removeAllListeners()
       sessions.delete(sessionId)
 
-      if (statusCode !== DisconnectReason.loggedOut) {
-        // Retry because issue https://github.com/WhiskeySockets/Baileys/issues/107
-        setTimeout(() => initSocket(sessionId), 1000)
-      } else {
+      if (statusCode === DisconnectReason.restartRequired) {
+        return initSocket(sessionId)
+      } else if (statusCode === DisconnectReason.loggedOut) {
         await clear(sessionId)
         console.log(`[${sessionId}] Session expired, need to scan QR again.`)
       }
     }
   })
-
   return sock
 }
 
@@ -81,7 +83,10 @@ export const getQR = async (sessionId, timeoutMs = DEFAULT_TIMEOUT) => {
   if (status === 'qr' && lastQR) return lastQR
 
   return new Promise((resolve, reject) => {
-    const cleanup = () => clearTimeout(timer)
+    const cleanup = () => {
+      clearTimeout(timer)
+      sock.ev.off('connection.update', onUpdate)
+    }
     const onUpdate = async ({ connection, qr }) => {
       if (connection === 'open') {
         cleanup()
@@ -97,23 +102,27 @@ export const getQR = async (sessionId, timeoutMs = DEFAULT_TIMEOUT) => {
     }
     const timer = setTimeout(() => {
       sock.ev.off('connection.update', onUpdate)
-      reject(new SocketError('Timeout waiting for QR Code'))
+      reject(new SocketError('Timeout waiting for QR Code, Try again'))
     }, timeoutMs)
 
     sock.ev.on('connection.update', onUpdate)
   })
 }
 
-const waitUntilConnected = async (sessionId, timeoutMs = DEFAULT_TIMEOUT) => {
+export const waitUntilConnected = async (sessionId, timeoutMs = DEFAULT_TIMEOUT) => {
   return new Promise((resolve, reject) => {
     const session = sessions.get(sessionId)
     if (!session) return reject(new SocketError('No session found'))
     if (session.status === 'connected') return resolve(true)
+    if (session.status === 'qr' && session.lastQR) {
+      return reject(new SocketError('QR not scanned — session not authenticated'))
+    }
     const cleanup = () => {
       clearTimeout(timer)
       session.sock.ev.off('connection.update', onUpdate)
+      session.sock.end()
     }
-    const onUpdate = ({ connection }) => {
+    const onUpdate = ({ connection, qr }) => {
       if (connection === 'open') {
         cleanup()
         resolve(true)
@@ -122,14 +131,14 @@ const waitUntilConnected = async (sessionId, timeoutMs = DEFAULT_TIMEOUT) => {
         cleanup()
         reject(new SocketError('Connection closed before ready'))
       }
+      if (qr) {
+        cleanup()
+        reject(new SocketError('QR not scanned — session not authenticated'))
+      }
     }
     const timer = setTimeout(() => {
       cleanup()
-      if (session.status === 'qr' && session.lastQR) {
-        reject(new SocketError('QR not scanned — session not authenticated'))
-      } else {
-        reject(new SocketError('Timeout waiting for connection'))
-      }
+      reject(new SocketError('Timeout waiting for connection'))
     }, timeoutMs)
     session.sock.ev.on('connection.update', onUpdate)
   })
