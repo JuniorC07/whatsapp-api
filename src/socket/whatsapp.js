@@ -120,7 +120,6 @@ export const waitUntilConnected = async (sessionId, timeoutMs = DEFAULT_TIMEOUT)
     const cleanup = () => {
       clearTimeout(timer)
       session.sock.ev.off('connection.update', onUpdate)
-      session.sock.end()
     }
     const onUpdate = ({ connection, qr }) => {
       if (connection === 'open') {
