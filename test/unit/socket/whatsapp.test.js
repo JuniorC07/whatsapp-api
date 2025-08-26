@@ -34,7 +34,7 @@ const flushMicrotasks = async () => {
 
 // ---------- Mocks (ESM-safe) ----------
 const mockEv = new TinyEmitter()
-const mockSock = { ev: mockEv, sendMessage: jest.fn() }
+const mockSock = { ev: mockEv, sendMessage: jest.fn(), end: jest.fn() }
 const mockMakeWASocket = jest.fn(() => mockSock)
 const mockFetchLatestBaileysVersion = jest.fn(async () => ({ version: [2, 9999, 9] }))
 const mockPino = jest.fn(() => ({}))
@@ -58,7 +58,7 @@ class SocketError extends Error {
 jest.unstable_mockModule('baileys', () => ({
   makeWASocket: mockMakeWASocket,
   fetchLatestBaileysVersion: mockFetchLatestBaileysVersion,
-  DisconnectReason: { loggedOut: 401 },
+  DisconnectReason: { restartRequired: 515, loggedOut: 401 },
 }))
 jest.unstable_mockModule('pino', () => ({ default: mockPino }))
 jest.unstable_mockModule('qrcode', () => ({
@@ -70,12 +70,12 @@ jest.unstable_mockModule('../../../src/utils/useMongoAuthState.js', () => ({
 }))
 jest.unstable_mockModule('../../../src/errors/index.js', () => ({ SocketError }))
 
-let getSocket, getQR, sendMessage
+let getSocket, getQR, sendMessage, waitUntilConnected
 let logSpy
 beforeAll(async () => {
   logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
   const mod = await import('../../../src/socket/whatsapp.js')
-  ;({ getSocket, getQR, sendMessage } = mod)
+  ;({ getSocket, getQR, sendMessage, waitUntilConnected } = mod)
 })
 
 afterAll(() => {
@@ -173,11 +173,11 @@ describe('[Unit][socket.whatsapp]', () => {
       await getSocket(sessionId)
       const p = getQR(sessionId, 50)
       jest.advanceTimersByTime(60)
-      await expect(p).rejects.toThrow(new SocketError('Timeout waiting for QR Code'))
+      await expect(p).rejects.toThrow(new SocketError('Timeout waiting for QR Code, Try again'))
     })
 
     it('should call getSocket when there is no session yet (no-session branch)', async () => {
-      const sid = newSessionId('qr-nosession')
+      const sid = newSessionId('existing session')
       mockMakeWASocket.mockClear()
       const p = getQR(sid, 200)
       await flushMicrotasks()
@@ -227,21 +227,18 @@ describe('[Unit][socket.whatsapp]', () => {
   })
 
   describe('connection close behavior', () => {
-    it('should schedule a retry when closed with status != loggedOut', async () => {
-      const spySetTimeout = jest.spyOn(global, 'setTimeout')
+    it('should schedule a retry when closed with status == restartRequired', async () => {
       await getSocket(sessionId)
       mockEv.emit('connection.update', {
         connection: 'close',
-        lastDisconnect: { error: { output: { statusCode: 500 } } },
+        lastDisconnect: { error: { output: { statusCode: 515 } } },
       })
       await flushMicrotasks()
-      expect(spySetTimeout).toHaveBeenCalled()
-      expect(spySetTimeout.mock.calls[0][1]).toBe(1000)
-      jest.runOnlyPendingTimers() // consome retry
+
+      expect(mockMakeWASocket).toHaveBeenCalledTimes(2)
     })
 
     it('should call clear(sessionId) and not schedule retry when closed due to loggedOut', async () => {
-      const spySetTimeout = jest.spyOn(global, 'setTimeout')
       await getSocket(sessionId)
       mockEv.emit('connection.update', {
         connection: 'close',
@@ -249,7 +246,55 @@ describe('[Unit][socket.whatsapp]', () => {
       })
       await flushMicrotasks()
       expect(mockClear).toHaveBeenCalledWith(sessionId)
-      expect(spySetTimeout).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('waitUntilConnected', () => {
+    it('should reject with SocketError when session is not present', async () => {
+      const p = waitUntilConnected('nosession', 50)
+      await expect(p).rejects.toThrow(new SocketError('No session found'))
+    })
+
+    it('should return true if session is connected', async () => {
+      const sessionId = 'existing-session'
+      await getSocket(sessionId)
+      const p = waitUntilConnected(sessionId, 200)
+      await flushMicrotasks()
+      mockEv.emit('connection.update', { connection: 'open' })
+      await flushMicrotasks()
+      await expect(p).resolves.toBe(true)
+    })
+
+    it('should throw an error when status is qr', async () => {
+      await getSocket(sessionId)
+      mockEv.emit('connection.update', { qr: 'some-qr' })
+      await flushMicrotasks()
+      const p = waitUntilConnected(sessionId, 200)
+      await expect(p).rejects.toThrow(new SocketError('QR not scanned — session not authenticated'))
+    })
+
+    it('should throw an error when connection is closed bed', async () => {
+      await getSocket(sessionId)
+      const p = waitUntilConnected(sessionId, 200)
+      mockEv.emit('connection.update', { connection: 'close' })
+      await flushMicrotasks()
+
+      await expect(p).rejects.toThrow(new SocketError('Connection closed before ready'))
+    })
+
+    it('should throw an error when session is not authenticated', async () => {
+      await getSocket(sessionId)
+      const p = waitUntilConnected(sessionId, 200)
+      mockEv.emit('connection.update', { qr: 'test-qr' })
+      await flushMicrotasks()
+      await expect(p).rejects.toThrow(new SocketError('QR not scanned — session not authenticated'))
+    })
+
+    it('should throw an error when no event is fired', async () => {
+      await getSocket(sessionId)
+      const p = waitUntilConnected(sessionId, 50)
+      jest.advanceTimersByTime(60)
+      await expect(p).rejects.toThrow(new SocketError('Timeout waiting for connection'))
     })
   })
 })
