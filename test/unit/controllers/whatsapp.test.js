@@ -48,7 +48,7 @@ describe('[Unit][controllers.whatsapp]', () => {
 
       await controller.getQRCode(req, res)
 
-      expect(res.status).toHaveBeenCalledWith(202)
+      expect(res.status).toHaveBeenCalledWith(200)
       expect(res.json).toHaveBeenCalledWith({ status: 'connected' })
     })
   })

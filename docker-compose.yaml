@@ -29,7 +29,7 @@ services:
     environment:
       NODE_ENV: "production"
       PORT: "3000"
-      DB_STRING_CONNECTION: "mongodb://root:root@mongo:27017/whatsapp?authSource=admin"
+      DB_STRING_CONNECTION: "mongodb://root:toor@mongo:27017/whatsapp?authSource=admin"
       DB_LOG: "false"
       DB_DATABASE: "wpp"
     ports:

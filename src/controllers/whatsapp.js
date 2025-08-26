@@ -14,7 +14,7 @@ const getQRCode = async (req, res) => {
     return res.send(buf)
   }
 
-  return res.status(202).json({ status: result })
+  return res.status(200).json({ status: result })
 }
 
 const send = async (req, res) => {
